@@ -1,0 +1,82 @@
+<?php
+
+use Swaggest\PhpCodeBuilder\PhpCode;
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+chdir(__DIR__ . '/schemas/apm-6.5');
+
+$context = new \Swaggest\JsonSchema\Context(new \PhilKra\Schema\RefProvider());
+
+$swaggerSchema = \Swaggest\JsonSchema\Schema::import(
+    'docs/spec/transactions/v1_transaction.json',
+    $context
+);
+
+chdir(__DIR__);
+
+$sourcePath = __DIR__ . '/src/Apm/V1';
+ensurePath($sourcePath);
+
+$appPath = realpath($sourcePath);
+
+$namespaceRoot = 'PhilKra\Apm\V1';
+
+$app = new \Swaggest\PhpCodeBuilder\App\PhpApp();
+$app->setNamespaceRoot($namespaceRoot, '.');
+
+$builder = new \Swaggest\PhpCodeBuilder\JsonSchema\PhpBuilder();
+$builder->buildSetters = true;
+$builder->makeEnumConstants = true;
+
+$builder->classCreatedHook = new \Swaggest\PhpCodeBuilder\JsonSchema\ClassHookCallback(
+    function (\Swaggest\PhpCodeBuilder\PhpClass $class, $path, $schema) use ($app, $namespaceRoot) {
+        $desc = '';
+        if ($schema->title) {
+            $desc = $schema->title;
+        }
+        if ($schema->description) {
+            $desc .= "\n" . $schema->description;
+        }
+        if ($fromRefs = $schema->getFromRefs()) {
+            $desc .= "\nBuilt from " . implode("\n" . ' <- ', $fromRefs);
+        }
+
+        $class->setDescription(trim($desc));
+
+        $class->setNamespace(getNameSpaceForPath($path, $namespaceRoot));
+
+        if ('#' === $path) {
+            return;
+        }
+
+        if (strpos($path, '#/definitions/') === 0) {
+            $class->setName(\Swaggest\PhpCodeBuilder\PhpCode::makePhpClassName(
+                substr($path, strlen('#/definitions/'))));
+        }
+
+        $app->addClass($class);
+    }
+);
+
+$builder->getType($swaggerSchema);
+$app->clearOldFiles($appPath);
+$app->store($appPath);
+
+function getNameSpaceForPath(string $path, string $namespaceRoot): string
+{
+    $pathParts = explode('->', $path);
+    array_shift($pathParts);
+
+    return $namespaceRoot . PhpCode::makePhpNamespaceName($pathParts);
+}
+
+function ensurePath(string $path) {
+    if (file_exists($path)) {
+        return;
+    }
+
+    if (!mkdir($path, 0777, true) && !is_dir($path)) {
+        throw new \RuntimeException(sprintf('Directory "%s" was not created', $path));
+    }
+}
