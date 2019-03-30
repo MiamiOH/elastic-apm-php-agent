@@ -1,5 +1,6 @@
 <?php
 
+use Swaggest\JsonSchema\Schema;
 use Swaggest\PhpCodeBuilder\PhpCode;
 
 require_once __DIR__ . '/vendor/autoload.php';
@@ -29,8 +30,16 @@ $builder = new \Swaggest\PhpCodeBuilder\JsonSchema\PhpBuilder();
 $builder->buildSetters = true;
 $builder->makeEnumConstants = true;
 
+//$builder->classPreparedHook = new \Swaggest\PhpCodeBuilder\JsonSchema\ClassHookCallback(
+//    function (\Swaggest\PhpCodeBuilder\PhpClass $class, string $path, Schema $schema) use ($app, $namespaceRoot) {
+//        if (1 == 1) {
+//            echo "here\n";
+//        }
+//    }
+//);
+
 $builder->classCreatedHook = new \Swaggest\PhpCodeBuilder\JsonSchema\ClassHookCallback(
-    function (\Swaggest\PhpCodeBuilder\PhpClass $class, $path, $schema) use ($app, $namespaceRoot) {
+    function (\Swaggest\PhpCodeBuilder\PhpClass $class, string $path, Schema $schema) use ($app, $namespaceRoot) {
         $desc = '';
         if ($schema->title) {
             $desc = $schema->title;
@@ -44,16 +53,20 @@ $builder->classCreatedHook = new \Swaggest\PhpCodeBuilder\JsonSchema\ClassHookCa
 
         $class->setDescription(trim($desc));
 
+        print "Starting path: $path\n";
+        if (strpos($path, '.json') !== false) {
+            $path = str_replace('.json', '', $path);
+        }
+
+        $schemaPathPrefix = 'docs/spec/';
+        if (strpos($path, $schemaPathPrefix) === 0) {
+            $path = substr($path, strlen($schemaPathPrefix));
+        }
+
         $class->setNamespace(getNameSpaceForPath($path, $namespaceRoot));
 
-        if ('#' === $path) {
-            return;
-        }
-
-        if (strpos($path, '#/definitions/') === 0) {
-            $class->setName(\Swaggest\PhpCodeBuilder\PhpCode::makePhpClassName(
-                substr($path, strlen('#/definitions/'))));
-        }
+        $class->setName(\Swaggest\PhpCodeBuilder\PhpCode::makePhpClassName($path));
+        print "Name is: " . $class->getFullyQualifiedName() . "\n";
 
         $app->addClass($class);
     }
